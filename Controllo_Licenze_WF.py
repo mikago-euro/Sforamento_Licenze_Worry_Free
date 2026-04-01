@@ -38,11 +38,9 @@ from urllib.parse import urlencode, urlparse
 import requests
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
+from dotenv import load_dotenv 
 
-try:
-    from dotenv import load_dotenv as _dotenv_load
-except Exception:  # pragma: no cover - fallback safe
-    _dotenv_load = None
+load_dotenv(":/srv/Progetti_Pyhton/Sforamento_Licenze_Worry_Free/.Controllo_Licenze_WF.env")
 
 logging.basicConfig(
     level=logging.INFO,

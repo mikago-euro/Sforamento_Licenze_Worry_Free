@@ -197,7 +197,7 @@ class LMPIClient:
         if product_id:
             payload["product_id"] = product_id
 
-        return self.request("POST", "/LMPI/v2/reports/summary", payload=payload)
+        return self.request("POST", "/LMPI/v3/reports/summary", payload=payload)
 
 
 def manual_load_env_file(env_file: str) -> None:

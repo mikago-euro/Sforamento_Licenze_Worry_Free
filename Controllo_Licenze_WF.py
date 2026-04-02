@@ -40,7 +40,7 @@ from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 from dotenv import load_dotenv 
 
-load_dotenv(":/srv/Progetti_Pyhton/Sforamento_Licenze_Worry_Free/.Controllo_Licenze_WF.env")
+load_dotenv("/srv/Progetti_Pyhton/Sforamento_Licenze_Worry_Free/.Controllo_Licenze_WF.env")
 
 logging.basicConfig(
     level=logging.INFO,

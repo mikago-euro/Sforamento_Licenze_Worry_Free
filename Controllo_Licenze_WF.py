@@ -38,9 +38,9 @@ from urllib.parse import urlencode, urlparse
 import requests
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
-from dotenv import load_dotenv 
+from dotenv import load_dotenv as _dotenv_load
 
-load_dotenv("/srv/Progetti_Pyhton/Sforamento_Licenze_Worry_Free/.Controllo_Licenze_WF.env")
+_dotenv_load("/srv/Progetti_Pyhton/Sforamento_Licenze_Worry_Free/.Controllo_Licenze_WF.env")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -53,6 +53,31 @@ DEFAULT_BASE_URL = "https://cspi.trendmicro.com"
 DEFAULT_LANGUAGE = "en-US"
 DEFAULT_TIMEOUT = 60
 DEFAULT_OUTPUT_DIR = "./output"
+
+
+def normalize_base_url(value: str) -> str:
+    value = str(value or "").strip().rstrip("/")
+    if not value:
+        raise ValueError("LMPI_BASE_URL non configurato")
+    if not value.startswith(("http://", "https://")):
+        value = f"https://{value}"
+    return value
+
+
+def previous_report_cycle_utc(now: Optional[dt.datetime] = None) -> tuple[str, str]:
+    current = now or dt.datetime.now(dt.timezone.utc)
+    first_day_current_month = current.date().replace(day=1)
+    previous_month_last_day = first_day_current_month - dt.timedelta(days=1)
+    return f"{previous_month_last_day.year:04d}", f"{previous_month_last_day.month:02d}"
+
+
+def report_cycle_is_current_or_future(year: str, month: str) -> bool:
+    try:
+        requested = dt.date(int(year), int(month), 1)
+    except (TypeError, ValueError):
+        return False
+    current_month = dt.datetime.now(dt.timezone.utc).date().replace(day=1)
+    return requested >= current_month
 
 
 class LMPIError(RuntimeError):
@@ -96,7 +121,7 @@ class AppConfig:
 
 class LMPIClient:
     def __init__(self, base_url: str, access_token: str, secret_key: str, *, timeout: int = DEFAULT_TIMEOUT) -> None:
-        self.base_url = base_url.rstrip("/")
+        self.base_url = normalize_base_url(base_url)
         self.access_token = access_token
         self.secret_key = secret_key
         self.timeout = timeout
@@ -152,6 +177,7 @@ class LMPIClient:
         }
 
         logging.info("Chiamata API %s %s", method.upper(), request_uri)
+        logging.info("URL finale chiamata: %s", url)
         response = self.session.request(
             method=method.upper(),
             url=url,
@@ -199,6 +225,9 @@ class LMPIClient:
 
         return self.request("POST", "/LMPI/v3/reports/summary", payload=payload)
 
+    def partner_product_list(self) -> Dict[str, Any]:
+        return self.request("GET", "/LMPI/v3/partners/product")
+
 
 def manual_load_env_file(env_file: str) -> None:
     path = Path(env_file)
@@ -235,6 +264,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     preload_env_file(pre_args.env_file)
 
     now = dt.datetime.now(dt.timezone.utc)
+    default_year, default_month = previous_report_cycle_utc(now)
 
     parser = argparse.ArgumentParser(
         description="Trend Micro LMPI: trova i clienti che usano piu' licenze di quelle disponibili."
@@ -252,12 +282,12 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--year",
-        default=os.getenv("LMPI_REPORT_YEAR", f"{now.year:04d}"),
+        default=os.getenv("LMPI_REPORT_YEAR", default_year),
         help="Anno del report cycle",
     )
     parser.add_argument(
         "--month",
-        default=os.getenv("LMPI_REPORT_MONTH", f"{now.month:02d}"),
+        default=os.getenv("LMPI_REPORT_MONTH", default_month),
         help="Mese del report cycle",
     )
     parser.add_argument(
@@ -537,6 +567,42 @@ def print_terminal_report(detail_rows: List[OveruseRow], customer_rows: List[Dic
         print(f"... console troncata: altre {len(detail_rows) - 50} righe disponibili nei file di output.")
 
 
+def diagnose_report_summary_404(client: LMPIClient, config: AppConfig, original_exc: LMPIError) -> None:
+    messages: List[str] = []
+    messages.append(
+        f"Report v3 chiamato su {normalize_base_url(config.base_url)}/LMPI/v3/reports/summary"
+    )
+
+    if report_cycle_is_current_or_future(config.report_year, config.report_month):
+        prev_year, prev_month = previous_report_cycle_utc()
+        messages.append(
+            "Stai interrogando il mese corrente o un mese futuro; i report LMPI sono mensili. "
+            f"Prova prima con il ciclo precedente {prev_year}-{prev_month}."
+        )
+
+    try:
+        probe_response = client.partner_product_list()
+        products = probe_response.get("products") if isinstance(probe_response, dict) else None
+        product_count = len(products) if isinstance(products, list) else "?"
+        messages.append(
+            "La probe GET /LMPI/v3/partners/product ha risposto correttamente "
+            f"({product_count} prodotti): il namespace LMPI v3 e' raggiungibile con queste credenziali."
+        )
+        messages.append(
+            "Il 404 e' quindi molto probabilmente legato al report cycle richiesto "
+            "oppure alla disponibilita' del report per questo tenant/account."
+        )
+    except LMPIError as probe_exc:
+        messages.append(f"La probe GET /LMPI/v3/partners/product fallisce: {probe_exc}")
+        messages.append(
+            "Se anche la probe v3 fallisce, la causa piu' probabile e' una di queste: "
+            "LMPI v3 non abilitato per questo tenant/credenziali, account non compatibile con v3, "
+            "oppure LMPI_BASE_URL sovrascritta da .env verso un host diverso da https://cspi.trendmicro.com."
+        )
+
+    raise LMPIError(f"{original_exc} | Diagnostica: {' | '.join(messages)}")
+
+
 def load_response(config: AppConfig) -> Dict[str, Any]:
     if config.input_json:
         logging.info("Caricamento risposta da file JSON: %s", config.input_json)
@@ -551,13 +617,20 @@ def load_response(config: AppConfig) -> Dict[str, Any]:
         secret_key=secret_key,
         timeout=config.timeout,
     )
-    return client.customer_summary(
-        year=config.report_year,
-        month=config.report_month,
-        language_code=config.language_code,
-        partner_id=config.partner_id,
-        product_id=config.product_id,
-    )
+
+    try:
+        return client.customer_summary(
+            year=config.report_year,
+            month=config.report_month,
+            language_code=config.language_code,
+            partner_id=config.partner_id,
+            product_id=config.product_id,
+        )
+    except LMPIError as exc:
+        message = str(exc)
+        if "HTTP 404" in message and "/LMPI/v3/reports/summary" in message:
+            diagnose_report_summary_404(client, config, exc)
+        raise
 
 
 def save_outputs(

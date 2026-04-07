@@ -398,11 +398,16 @@ def response_summary_rows(response: Dict[str, Any]) -> List[Dict[str, Any]]:
     )
 
 def debug_print_customer_usage(summary_rows: Iterable[Dict[str, Any]]) -> None:
+def debug_print_customer_usage(summary_rows: Iterable[Dict[str, Any]]) -> None:
     print()
     print("=== DEBUG RAW CUSTOMER USAGE ===")
 
     rows_printed = 0
-    for row in summary_rows:
+    for idx, row in enumerate(summary_rows, start=1):
+        print(f"[ROW {idx}] JSON RAW:")
+        print(json.dumps(row, ensure_ascii=False, indent=2))
+        print("-" * 80)
+
         customer = str(row.get("customer", "")).strip() or "<unknown>"
         product_name = str(row.get("product_name", "")).strip() or "<no product>"
         service_plan = str(row.get("service_plan", "")).strip() or "<no plan>"
@@ -416,10 +421,12 @@ def debug_print_customer_usage(summary_rows: Iterable[Dict[str, Any]]) -> None:
             f"Cliente={customer} | "
             f"Prodotto={product_name} | "
             f"Piano={service_plan} | "
+            f"Unit={unit} | "
             f"Provisioned={provisioned} | "
             f"Used={used} | "
-            f"Excess={excess} {unit}"
+            f"Excess={excess}"
         )
+        print("=" * 80)
         rows_printed += 1
 
     if rows_printed == 0:
@@ -718,7 +725,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
 
     response = load_response(config)
+    print("DEBUG response keys:", list(response.keys()))
     summary_rows = response_summary_rows(response)
+    print("DEBUG numero righe summary:", len(summary_rows))
+    debug_print_customer_usage(summary_rows)
     debug_print_customer_usage(summary_rows)
     detail_rows = normalize_overuse_rows(summary_rows, min_excess=config.min_excess)
     customer_rows = aggregate_by_customer(detail_rows)

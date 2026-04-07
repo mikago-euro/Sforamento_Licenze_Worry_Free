@@ -34,7 +34,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import urlencode, urlparse
-
+from zoneinfo import ZoneInfo
 import requests
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
@@ -65,7 +65,7 @@ def normalize_base_url(value: str) -> str:
 
 
 def previous_report_cycle_utc(now: Optional[dt.datetime] = None) -> tuple[str, str]:
-    current = now or dt.datetime.now(dt.timezone.utc)
+    current = dt.datetime.now(ZoneInfo("Europe/Rome"))
     first_day_current_month = current.date().replace(day=1)
     previous_month_last_day = first_day_current_month - dt.timedelta(days=1)
     return f"{previous_month_last_day.year:04d}", f"{previous_month_last_day.month:02d}"
@@ -76,7 +76,7 @@ def report_cycle_is_current_or_future(year: str, month: str) -> bool:
         requested = dt.date(int(year), int(month), 1)
     except (TypeError, ValueError):
         return False
-    current_month = dt.datetime.now(dt.timezone.utc).date().replace(day=1)
+    current_month = dt.datetime.now(ZoneInfo("Europe/Rome")).date().replace(day=1)
     return requested >= current_month
 
 
@@ -263,7 +263,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     pre_args, _ = pre_parser.parse_known_args(argv)
     preload_env_file(pre_args.env_file)
 
-    now = dt.datetime.now(dt.timezone.utc)
+    now = dt.datetime.now(ZoneInfo("Europe/Rome"))
     default_year, default_month = previous_report_cycle_utc(now)
 
     parser = argparse.ArgumentParser(

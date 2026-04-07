@@ -397,7 +397,7 @@ def response_summary_rows(response: Dict[str, Any]) -> List[Dict[str, Any]]:
         f"Chiavi disponibili: {', '.join(sorted(response.keys()))}"
     )
 
-def debug_print_customer_usage(summary_rows: Iterable[Dict[str, Any]]) -> None:
+
 def debug_print_customer_usage(summary_rows: Iterable[Dict[str, Any]]) -> None:
     print()
     print("=== DEBUG RAW CUSTOMER USAGE ===")

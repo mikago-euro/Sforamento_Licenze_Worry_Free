@@ -397,6 +397,36 @@ def response_summary_rows(response: Dict[str, Any]) -> List[Dict[str, Any]]:
         f"Chiavi disponibili: {', '.join(sorted(response.keys()))}"
     )
 
+def debug_print_customer_usage(summary_rows: Iterable[Dict[str, Any]]) -> None:
+    print()
+    print("=== DEBUG RAW CUSTOMER USAGE ===")
+
+    rows_printed = 0
+    for row in summary_rows:
+        customer = str(row.get("customer", "")).strip() or "<unknown>"
+        product_name = str(row.get("product_name", "")).strip() or "<no product>"
+        service_plan = str(row.get("service_plan", "")).strip() or "<no plan>"
+        unit = str(row.get("unit", "")).strip() or "Seats"
+
+        provisioned = to_int(row.get("provisioned"))
+        used = to_int(row.get("used"))
+        excess = used - provisioned
+
+        print(
+            f"Cliente={customer} | "
+            f"Prodotto={product_name} | "
+            f"Piano={service_plan} | "
+            f"Provisioned={provisioned} | "
+            f"Used={used} | "
+            f"Excess={excess} {unit}"
+        )
+        rows_printed += 1
+
+    if rows_printed == 0:
+        print("Nessuna riga trovata nella chiave 'summary'.")
+
+    print("=== END DEBUG RAW CUSTOMER USAGE ===")
+    print()
 
 def normalize_overuse_rows(summary_rows: Iterable[Dict[str, Any]], *, min_excess: int) -> List[OveruseRow]:
     overuse_rows: List[OveruseRow] = []
@@ -689,6 +719,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     response = load_response(config)
     summary_rows = response_summary_rows(response)
+    debug_print_customer_usage(summary_rows)
     detail_rows = normalize_overuse_rows(summary_rows, min_excess=config.min_excess)
     customer_rows = aggregate_by_customer(detail_rows)
     saved_paths = save_outputs(config, response, detail_rows, customer_rows)

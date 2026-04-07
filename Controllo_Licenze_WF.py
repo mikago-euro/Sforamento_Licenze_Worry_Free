@@ -64,8 +64,13 @@ def normalize_base_url(value: str) -> str:
     return value
 
 
-def previous_report_cycle_utc(now: Optional[dt.datetime] = None) -> tuple[str, str]:
-    current = dt.datetime.now(ZoneInfo("Europe/Rome"))
+def current_report_cycle(now: Optional[dt.datetime] = None) -> tuple[str, str]:
+    current = now or dt.datetime.now(ZoneInfo("Europe/Rome"))
+    return f"{current.year:04d}", f"{current.month:02d}"
+
+
+def previous_report_cycle(now: Optional[dt.datetime] = None) -> tuple[str, str]:
+    current = now or dt.datetime.now(ZoneInfo("Europe/Rome"))
     first_day_current_month = current.date().replace(day=1)
     previous_month_last_day = first_day_current_month - dt.timedelta(days=1)
     return f"{previous_month_last_day.year:04d}", f"{previous_month_last_day.month:02d}"
@@ -264,7 +269,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     preload_env_file(pre_args.env_file)
 
     now = dt.datetime.now(ZoneInfo("Europe/Rome"))
-    default_year, default_month = previous_report_cycle_utc(now)
+    default_year, default_month = current_report_cycle(now)
 
     parser = argparse.ArgumentParser(
         description="Trend Micro LMPI: trova i clienti che usano piu' licenze di quelle disponibili."
@@ -574,7 +579,7 @@ def diagnose_report_summary_404(client: LMPIClient, config: AppConfig, original_
     )
 
     if report_cycle_is_current_or_future(config.report_year, config.report_month):
-        prev_year, prev_month = previous_report_cycle_utc()
+        prev_year, prev_month = previous_report_cycle()
         messages.append(
             "Stai interrogando il mese corrente o un mese futuro; i report LMPI sono mensili. "
             f"Prova prima con il ciclo precedente {prev_year}-{prev_month}."
